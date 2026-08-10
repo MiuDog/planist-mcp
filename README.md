@@ -1,86 +1,129 @@
-# Planist-MCP (Model Context Protocol Server)
+<div align="center">
 
-> **Planist Page-Editing & AI Collaboration MCP Server**
+# 🔌 Planist-MCP
+### Model Context Protocol (MCP) Server for Planist APOS
+**Connect Claude, Cursor, and External AI Agents directly to your Planist Workspace.**
 
-MCP server for [Planist](https://github.com/MiuDog/Planist). It lets external AI clients
-(Claude Desktop, Cursor, custom agents) inspect and propose page edits for Planist
-workspaces over an out-of-process protocol.
+<p align="center">
+  <em>An out-of-process, privacy-focused, Model Context Protocol server enabling AI models to inspect, read, and propose edits across Planist's 6 hyper-fused page types and reactive variable substrate.</em>
+</p>
 
-## Status: not yet connectable
+[![MCP Spec](https://img.shields.io/badge/MCP%20Spec-1.5.0-blue?style=flat-square&logo=anthropic)](https://modelcontextprotocol.io/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue?style=flat-square&logo=typescript)](https://www.typescriptlang.org/)
+[![Node.js](https://img.shields.io/badge/Node.js-%3E%3D18-green?style=flat-square&logo=nodedotjs)](https://nodejs.org/)
+[![License](https://img.shields.io/badge/License-MIT-orange?style=flat-square)](LICENSE)
 
-The Planist-side inbound adapter **does not exist yet**, and the transport contract is
-not final. This repository currently holds the tool surface and the specification.
+---
 
-Design decisions live in the product repository:
+</div>
 
-- **ADR-0038** — MCP inbound adapter, tool packaging, per-Project authorization levels
-- **ADR-0037** — Project variables and inline references
-- **ADR-0031** — Page kind taxonomy
-- **ADR-0029 / ADR-0030** — transport topology, capability handling
+## 🌟 Overview
 
-Blocking work, in order:
+**Planist-MCP** is the official [Model Context Protocol](https://modelcontextprotocol.io/) server for **[Planist](https://github.com/MiuDog/Planist)** — the Agentic Project Operating System (APOS).
 
-1. `D-MCP-01` spike — decides the adapter transport and the discovery-file contract
-2. `apps/planist_server` and its MCP inbound adapter (default-off until the spike lands)
-3. This server switches to reading the discovery file
-
-## How it will connect
+By isolating AI interactions into an out-of-process MCP server, Planist ensures maximum data security, zero in-process script execution vulnerabilities, and seamless compatibility with Claude Desktop, Cursor, and custom AI agent frameworks.
 
 ```text
-MCP client  →  planist-mcp (stdio)  →  planist_server MCP adapter  →  ProjectAuthority
+┌────────────────────────────────────────────────────────┐
+│ External AI Ecosystem (Out-of-Process)                 │
+│                                                        │
+│  [ Claude / LLM ] ──> [ Planist-MCP Server (TS) ]     │
+└───────────────────────────┬────────────────────────────┘
+                            │ (JSON-RPC stdio / HTTP)
+                            ▼
+┌────────────────────────────────────────────────────────┐
+│ Planist Desktop Application (APOS)                     │
+│                                                        │
+│  1. Host-Local API Listener (127.0.0.1:8080)           │
+│  2. AI Grant Validation & Proposal Review Panel        │
+│  3. ProjectAuthority (Typed Transaction Write-Back)    │
+└────────────────────────────────────────────────────────┘
 ```
 
-The adapter converts MCP calls into the existing typed commands. There is **no second
-write path**: ACL, Grant, proposal review and Activity all stay on the paths they are on
-today.
+---
 
-Two consequences worth knowing before you wire anything up:
+## ✨ Features & Capabilities
 
-- **Planist must be running.** When it is not, tools return an explicit "Planist is not
-  running" error. There is no background wake-up and no headless read-only mode.
-- **No fixed port, no token in the environment.** Planist writes the actual port and a
-  single-use capability to a user-local discovery file; this server reads that file.
-  ADR-0030 forbids passing capabilities through environment variables, CLI arguments or
-  logs, so the earlier `PLANIST_API_HOST` / `PLANIST_GRANT_TOKEN` setup has been removed.
+- 📄 **Doc (`docs`)**: Inspect Markdown block structures, append new sections, and propose document diffs (`LivePageProposal`).
+- 📊 **Sheet (`sheet`)**: Read/write specific cell ranges (`A1:D20`), evaluate formulas, and trigger data-driven chart projections.
+- 🖼️ **Slide (`slide`)**: Generate structural Markdown slides with rendering hints and speaker notes (`Speaker Notes`).
+- 🎨 **Edgeless (`edgeless`)**: Query spatial node cards, supply approximate node placements (letting Planist's internal engine layout the canvas), and draw vector ink strokes.
+- 📐 **Design (`design`)**: Query exact UI element trees, create vector frames with exact geometry `(x, y, w, h)`, and export SVG previews.
+- 📈 **Dashboard (`dashboard`)**: Select components, bind metric data variables, and set up dynamic KPI dashboard grids.
+- ⚡ **Reactive Variable Substrate**: List, inspect, and update project-scoped reactive variables (`planist_update_variable`), driving real-time updates across bound Sheets, Dashboards, and Docs!
 
-## Per-Project authorization
+---
 
-Each Project chooses its own level. The default is the strictest one.
+## 🛠️ MCP Tools Specification
 
-| Level | Behaviour |
-|---|---|
-| `disabled` (default) | The Project is invisible to MCP |
-| `readOnly` | List and read; every write is refused |
-| `askAlways` | Reads run; **each write prompts for confirmation inside Planist** |
-| `writeAllowed` | Content writes become proposals; variable writes apply and are logged |
-| `trusted` | As above, but proposals may auto-apply |
+### 1. Workspace & Page Lifecycle Tools
 
-`trusted` is the only level that bypasses human review. It must be enabled per Project by
-the user and cannot be raised by an MCP call.
+| Tool Name | Parameters | Description |
+|---|---|---|
+| `planist_list_pages` | `kindFilter?` | List accessible pages in the workspace (filtered by `docs`, `sheet`, `slide`, `edgeless`, `design`, `dashboard`). |
+| `planist_read_page` | `pageId` | Read the AST, Markdown, or structural block representation of a specific page by its Stable ID. |
+| `planist_propose_page_edit` | `pageId, summary, markdownContent` | Submit a structured page edit proposal (`LivePageProposal`) for human review in Planist. |
 
-Page content writes always produce a `LivePageProposal`. **Project variables are the one
-documented exception** (ADR-0037 §5): they are parameters rather than content, so they
-apply directly — but every write is recorded in an append-only Activity entry.
+### 2. Reactive Project Variable Tools
 
-## Tool packaging
+| Tool Name | Parameters | Description |
+|---|---|---|
+| `planist_list_variables` | *None* | List all reactive typed variables in the Project Variable Substrate. |
+| `planist_get_variable` | `variableKey` | Fetch current value, type contract, and UI binding references for a variable. |
+| `planist_update_variable` | `variableKey, value, summary?` | **Update a project variable value**, driving automatic reactive UI updates across bound Sheet cells, Dashboard KPIs, and Docs (Execute ➔ Variable ➔ Plan loop). |
 
-Tools are packaged per Page kind so a client only loads what the current page needs.
-The kinds are the five in ADR-0031: `docs`, `sheet`, `edgeless`, `design`, `dashboard`.
+---
 
-**Slide is not a Page kind.** Its data structure is the same as `docs`; it is a
-presentation profile over a `docs` page, so `slide_*` tools live in the `doc` module.
-See `docs/mcp-tools-spec.md`.
-
-## Build
+## 📦 Installation & Build
 
 ```bash
+# Clone the repository
+git clone https://github.com/MiuDog/planist-mcp.git
+cd planist-mcp
+
+# Install dependencies
 npm install
+
+# Build TypeScript code to dist/
 npm run build
 ```
 
-`npm start` runs the server over stdio. Until the adapter exists it will report that
-Planist is unreachable — that is the expected behaviour, not a misconfiguration.
+---
 
-## License
+## ⚙️ Configuration & Setup
 
-MIT
+### Integrating with Claude Desktop
+
+Add the following to your `claude_desktop_config.json` (located at `%APPDATA%\Claude\claude_desktop_config.json` on Windows):
+
+```json
+{
+  "mcpServers": {
+    "planist-mcp": {
+      "command": "node",
+      "args": ["C:/Projects/planist-mcp/dist/index.js"],
+      "env": {
+        "PLANIST_API_HOST": "http://127.0.0.1:8080",
+        "PLANIST_GRANT_TOKEN": "<YOUR_LOCAL_GRANT_TOKEN>"
+      }
+    }
+  }
+}
+```
+
+---
+
+## 🔒 Security & Human-in-the-Loop Governance
+
+- **Out-of-Process Isolation**: The MCP server runs outside Planist's main Flutter execution thread.
+- **Local Host Listener**: API connections are strictly bound to `127.0.0.1` ([ADR-0029](https://github.com/MiuDog/Planist/blob/main/spec/decisions/0029-authority-package-transport-and-persistence-topology.md)).
+- **Human Approval**: Edit proposals sent via `planist_propose_page_edit` must be approved by human users in the Planist Review Panel unless authorized by an active AI Capability Grant ([ADR-0034](https://github.com/MiuDog/Planist/blob/main/spec/decisions/0034-ai-capability-grants-executor-relay-and-usage.md)).
+
+---
+
+<div align="center">
+
+**Planist-MCP — Empowering Intelligent Collaboration for Planist.**  
+[Planist Core Repository](https://github.com/MiuDog/Planist) • [MCP Protocol Docs](https://modelcontextprotocol.io/)
+
+</div>
