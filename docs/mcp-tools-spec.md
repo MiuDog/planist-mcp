@@ -1,6 +1,15 @@
-# Planist-MCP Tools Specification (6-Page Types Architecture)
+# Planist-MCP Tools Specification
 
-> **發想與規格藍圖：涵蓋 Doc、Sheet、Slide、Edgeless、Design、Dashboard 六大頁面型態之專用 MCP 工具矩陣**
+> **依 ADR-0031 的五種 Page kind（`docs`／`sheet`／`edgeless`／`design`／`dashboard`）
+> 分包的 MCP 工具矩陣，加上 Project 變數模組。**
+
+> **2026-08-10 修訂**：原稿列「六大頁面型態」含 Slide，與 ADR-0031 衝突 ——
+> 該 ADR 明文寫「Diagram、Board、Presentation 不登錄為 Page kind」。
+> 使用者確認 slide 的資料架構與 Doc 相同，因此 **Slide 是 `docs` 的 presentation profile**，
+> `slide_*` 工具併入 Doc 模組。詳見產品 repo 的 ADR-0038 第 5 節。
+>
+> 本文件是規格藍圖。Planist 端的 inbound adapter 尚未存在，
+> `D-MCP-01` spike 決定傳輸格式前不得實作連線。
 
 ---
 
@@ -22,7 +31,7 @@
 | 工具名稱 | 輸入參數 | 描述 |
 |---|---|---|
 | `planist_list_pages` | `filterKind?` | 列出目前專案內所有頁面 (包含 title, pageId, kind)。 |
-| `planist_create_page` | `kind, title, initialData?` | 建立指定 Kind (`docs`, `sheet`, `slide`, `edgeless`, `design`, `dashboard`) 的全新頁面。 |
+| `planist_create_page` | `kind, title, initialData?` | 建立指定 Kind (`docs`, `sheet`, `edgeless`, `design`, `dashboard`) 的全新頁面。`slide` 不是 kind；要簡報請建 `docs` 並套用 presentation profile。 |
 | `planist_convert_page_kind` | `pageId, targetKind` | 執行 Derived Kind Conversion (依據 ADR-0031 建立新 Page ID 副本)。 |
 
 ---
@@ -47,13 +56,21 @@
 
 ---
 
-### Module 3: Slide (簡報頁面工具包)
+### Module 1b: Slide（Doc 模組的 presentation profile 子集）
+
+Slide **不是獨立 Page kind**，也不是獨立模組。以下工具作用於帶 presentation profile
+的 `docs` page：分頁邊界是 docs body 中的一種 block，講稿是該 block 的 metadata。
+切換呈現不建立內容副本，也不改 Page kind。
 
 | 工具名稱 | 輸入參數 | 描述 |
 |---|---|---|
-| `slide_list_slides` | `pageId` | 取得所有投影片頁面、頁碼與佈局範本。 |
-| `slide_create_from_markdown` | `pageId, slidesMarkdown` | 依據 Markdown 結構化語法生成簡報投影片與樣式渲染標籤。 |
-| `slide_set_speaker_notes` | `pageId, slideIndex, notes` | 設定特定投影片的演講者講稿 (Speaker Notes)。 |
+| `doc_list_slides` | `pageId` | 列出分頁邊界、頁碼與套用中的版面。 |
+| `doc_apply_presentation_profile` | `pageId, theme, layoutRules` | 對 docs page 套用簡報呈現：主題、版面規則。 |
+| `doc_set_speaker_notes` | `pageId, slideIndex, notes` | 設定某一頁的講稿。 |
+
+**風格上限**：主題選擇 ＋ 宣告式版面（既有 layout node）＋ ADR-0024 的 L3 宣告式繪圖。
+**不支援 AI 產出 React／任意元件／腳本** —— 那會讓產出不可 diff，proposal 核准機制失效。
+open-slide 的視覺結果在此範圍內可達成，其 React 機制不採用。
 
 ---
 
@@ -97,14 +114,15 @@ planist-mcp/
 │   ├── index.ts                 # MCP Server 入口 (Stdio / Transport)
 │   ├── modules/
 │   │   ├── workspace.ts         # Module 0: Lifecycle
-│   │   ├── doc.ts               # Module 1: Doc Tools
+│   │   ├── doc.ts               # Module 1: Doc Tools（含 slide presentation profile）
 │   │   ├── sheet.ts             # Module 2: Sheet Tools
-│   │   ├── slide.ts             # Module 3: Slide Tools
 │   │   ├── edgeless.ts          # Module 4: Edgeless Tools (Approximate Layout)
 │   │   ├── design.ts            # Module 5: Design Tools (Exact Coordinates)
-│   │   └── dashboard.ts        # Module 6: Dashboard Tools (KPI & Variables)
+│   │   ├── dashboard.ts         # Module 6: Dashboard Tools
+│   │   └── variables.ts         # Project 變數（ADR-0037）
 │   └── client/
-│       └── planist-api.ts       # Planist 本機 REST/JSON-RPC Client (127.0.0.1)
+│       └── planist-adapter.ts   # 讀 discovery 檔取得 port 與一次性 capability
+│                                # （不使用固定 port，不從環境變數取 token）
 └── docs/
     └── mcp-tools-spec.md        # 本規格文件
 ```
